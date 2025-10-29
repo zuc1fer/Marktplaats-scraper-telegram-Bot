@@ -22,7 +22,7 @@ from telegram.ext import (
     ConversationHandler
 )
 
-BOT_TOKEN = "8344039967:AAEX7OsSWsYuuXH5pTYLqDMiYaXyKMbqA54"
+BOT_TOKEN = "8243880842:AAF7GDrgcQeSmssp1jBXkWm3jILG-RU5LWs
 
 BASE = "https://www.marktplaats.nl"
 DEFAULT_USER_AGENT = (
