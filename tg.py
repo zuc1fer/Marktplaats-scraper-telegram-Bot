@@ -1,8 +1,3 @@
-"""
-Marktplaats Scraper Telegram Bot
-Converts the scraper_v2.py into an interactive Telegram bot
-"""
-
 import asyncio
 import csv
 import io
@@ -27,10 +22,8 @@ from telegram.ext import (
     ConversationHandler
 )
 
-# Bot configuration
 BOT_TOKEN = "8344039967:AAEX7OsSWsYuuXH5pTYLqDMiYaXyKMbqA54"
 
-# Scraper constants
 BASE = "https://www.marktplaats.nl"
 DEFAULT_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -40,10 +33,8 @@ DEFAULT_USER_AGENT = (
 DEFAULT_PAGES = 500
 THREADS_COUNT = 10
 
-# Conversation states
 AWAITING_KEYWORDS, AWAITING_PROXIES, AWAITING_PAGES = range(3)
 
-# Skip patterns (from original script)
 SKIP_PATTERNS = [
     r'\bop voorraad\b', r'\bleverbaar\b', r'\brefurbished\b', r'\bgarantie\b',
     r'\bshowroom\b', r'\bmontage\b', r'\binstallatie\b', r'\blegservice\b',
@@ -81,8 +72,6 @@ SKIP_PATTERNS = [
 
 SKIP_REGEX = re.compile('|'.join(SKIP_PATTERNS), re.IGNORECASE)
 
-
-# ==================== SCRAPER FUNCTIONS ====================
 
 def parse_proxy_string(proxy_string: str) -> Optional[Dict[str, Any]]:
     if not proxy_string:
@@ -653,8 +642,6 @@ def make_keyword_token(keyword: str) -> str:
 
 
 def create_csv_file(data: List, fieldnames: List[str]) -> io.BytesIO:
-    """Create a CSV file in memory and return as BytesIO"""
-    # Create string buffer first
     string_buffer = io.StringIO()
     
     if len(fieldnames) == 1:
@@ -667,19 +654,15 @@ def create_csv_file(data: List, fieldnames: List[str]) -> io.BytesIO:
         writer.writeheader()
         writer.writerows(data)
     
-    # Convert string to bytes
     csv_string = string_buffer.getvalue()
     bytes_buffer = io.BytesIO(csv_string.encode('utf-8'))
     bytes_buffer.seek(0)
-    bytes_buffer.name = 'data.csv'  # Add name attribute for Telegram
+    bytes_buffer.name = 'data.csv'
     
     return bytes_buffer
 
 
-# ==================== TELEGRAM BOT HANDLERS ====================
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Start command - send welcome message with instructions"""
     welcome_message = """
 🤖 **Marktplaats Scraper Bot**
 
@@ -719,7 +702,6 @@ Ready to start? Click the button below! 👇
 
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle button callbacks"""
     query = update.callback_query
     await query.answer()
     
@@ -764,7 +746,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def receive_proxies(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle proxy file upload"""
     if update.message.document:
         document = update.message.document
         file = await context.bot.get_file(document.file_id)
@@ -805,7 +786,6 @@ async def receive_proxies(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def skip_proxies(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Skip proxy upload"""
     context.user_data['use_proxy'] = False
     context.user_data['proxy_pool'] = None
     
@@ -820,10 +800,8 @@ async def skip_proxies(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def receive_keywords(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle keyword input"""
     text = update.message.text.strip()
     
-    # Parse keywords from text (support both newlines and commas)
     keywords = []
     for line in text.split('\n'):
         for keyword in line.split(','):
@@ -841,7 +819,6 @@ async def receive_keywords(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['keyword_index'] = 0
     context.user_data['keyword_pages_map'] = {}
     
-    # Detect available pages for first keyword
     progress_msg = await update.message.reply_text(
         f"🔍 Detecting available pages for keyword 1/{len(keywords)}...\n"
         "This may take a moment..."
@@ -853,24 +830,20 @@ async def receive_keywords(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def process_next_keyword_pages(update: Update, context: ContextTypes.DEFAULT_TYPE, msg=None):
-    """Process page detection and ask for input for current keyword"""
     keywords = context.user_data['keywords']
     keyword_index = context.user_data['keyword_index']
     
     if keyword_index >= len(keywords):
-        # All keywords processed, start scraping
         await start_scraping_process(update, context)
         return
     
     keyword = keywords[keyword_index]
     proxy_pool = context.user_data.get('proxy_pool')
     
-    # Detect pages for current keyword
     proxy = proxy_pool[keyword_index % len(proxy_pool)] if proxy_pool else None
     session = create_session(DEFAULT_USER_AGENT, proxy)
     total_pages = get_total_pages_for_keyword(session, keyword)
     
-    # Build message for this keyword
     page_info = f"📊 **Keyword {keyword_index + 1}/{len(keywords)}: `{keyword}`**\n\n"
     
     if total_pages:
@@ -896,7 +869,6 @@ async def process_next_keyword_pages(update: Update, context: ContextTypes.DEFAU
 
 
 async def receive_pages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle page count input for current keyword"""
     text = update.message.text.strip()
     
     keywords = context.user_data['keywords']
@@ -918,7 +890,6 @@ async def receive_pages(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return AWAITING_PAGES
             
-            # Check if exceeds max available
             if max_pages and pages > max_pages:
                 await update.message.reply_text(
                     f"⚠️ Only {max_pages} pages available for '{keyword}'.\n"
@@ -932,17 +903,14 @@ async def receive_pages(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return AWAITING_PAGES
     
-    # Save pages for this keyword
     context.user_data['keyword_pages_map'][keyword] = pages
     
     await update.message.reply_text(
         f"✅ Set {pages} pages for '{keyword}'"
     )
     
-    # Move to next keyword
     context.user_data['keyword_index'] += 1
     
-    # Check if there are more keywords
     if context.user_data['keyword_index'] < len(keywords):
         progress_msg = await update.message.reply_text(
             f"🔍 Detecting pages for next keyword..."
@@ -950,13 +918,11 @@ async def receive_pages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await process_next_keyword_pages(update, context, progress_msg)
         return AWAITING_PAGES
     else:
-        # All keywords configured, show summary and start
         await show_config_summary_and_start(update, context)
         return ConversationHandler.END
 
 
 async def show_config_summary_and_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show final configuration summary and start scraping"""
     keywords = context.user_data['keywords']
     keyword_pages_map = context.user_data['keyword_pages_map']
     
@@ -972,17 +938,14 @@ async def show_config_summary_and_start(update: Update, context: ContextTypes.DE
     
     await update.message.reply_text(summary, parse_mode='Markdown')
     
-    # Start scraping
     await run_scraper(update, context)
 
 
 async def start_scraping_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Alternative entry point for starting scraping"""
     await show_config_summary_and_start(update, context)
 
 
 async def run_scraper(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Execute the scraping process"""
     keywords = context.user_data['keywords']
     keyword_pages_map = context.user_data['keyword_pages_map']
     proxy_pool = context.user_data.get('proxy_pool')
@@ -1006,7 +969,6 @@ async def run_scraper(update: Update, context: ContextTypes.DEFAULT_TYPE):
     start_time = time.time()
     
     async def update_progress(message):
-        """Update progress message"""
         try:
             await progress_msg.edit_text(message, parse_mode='Markdown')
         except:
@@ -1022,7 +984,6 @@ async def run_scraper(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"⏳ Please wait..."
         )
         
-        # Run scraper in thread pool to avoid blocking
         loop = asyncio.get_event_loop()
         results = await loop.run_in_executor(
             None,
@@ -1058,12 +1019,10 @@ async def run_scraper(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"📊 Total so far: {len(all_full)}"
         )
         
-        # Small delay between keywords
         await asyncio.sleep(1)
     
     total_time = time.time() - start_time
     
-    # Generate final stats message
     stats_message = f"""
 ✅ **SCRAPING COMPLETE**
 
@@ -1083,7 +1042,6 @@ async def run_scraper(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await progress_msg.edit_text(stats_message, parse_mode='Markdown')
     
-    # Generate and send CSV files
     try:
         if all_phones:
             await update.message.reply_text("📤 Sending phones.csv...")
@@ -1122,7 +1080,6 @@ async def run_scraper(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Valid listings: {len(all_full)}"
         )
     
-    # Send final summary
     final_summary = f"""
 🎉 **ALL FILES SENT**
 
@@ -1135,7 +1092,6 @@ Type /start to begin a new search.
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Cancel the conversation"""
     await update.message.reply_text(
         "❌ Operation cancelled.\n\nType /start to begin again."
     )
@@ -1143,11 +1099,8 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def main():
-    """Start the bot"""
-    # Create application
     application = Application.builder().token(BOT_TOKEN).build()
     
-    # Create conversation handler
     conv_handler = ConversationHandler(
         entry_points=[
             CommandHandler('start', start),
@@ -1171,10 +1124,8 @@ def main():
         ]
     )
     
-    # Add handlers
     application.add_handler(conv_handler)
     
-    # Start bot
     print("🤖 Bot started! Press Ctrl+C to stop.")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
